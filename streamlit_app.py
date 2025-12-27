@@ -100,38 +100,26 @@ overall_yoy_pct = (net_yoy / total_ly) if total_ly != 0 else 0
 
 c1, c2, c3, c4 = st.columns(4)
 
-c1.metric(
-    "Sales 2024",
-    f"₹{total_ly:,.0f}"
-)
+c1.metric("Sales 2024", f"₹{total_ly:,.0f}")
+c2.metric("Sales 2025", f"₹{total_cy:,.0f}")
+c3.metric("Net YOY Change", f"₹{net_yoy:,.0f}")
+c4.metric("Overall YOY %", f"{overall_yoy_pct * 100:.1f}%")
 
-c2.metric(
-    "Sales 2025",
-    f"₹{total_cy:,.0f}"
-)
-
-c3.metric(
-    "Net YOY Change",
-    f"₹{net_yoy:,.0f}"
-)
-
-c4.metric(
-    "Overall YOY %",
-    f"{overall_yoy_pct * 100:.1f}%"
-)
-
-
-
+# =============================
+# STORE-WISE YOY BAR CHART
+# =============================
 fig = px.bar(
-        store_agg.sort_values("YOY_Δ"),
-        x="YOY_Δ",
-        y="Store",
-        orientation="h",
-        title="Store-wise YOY Impact",
-        color=store_agg["YOY_Δ"] > 0,
-        color_discrete_map={True: "green", False: "red"}
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    store_agg.sort_values("YOY_Δ"),
+    x="YOY_Δ",
+    y="Store",
+    orientation="h",
+    title="Store-wise YOY Impact",
+    color=store_agg["YOY_Δ"] > 0,
+    color_discrete_map={True: "green", False: "red"}
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
 
     st.dataframe(store_agg[[
         "Store", "Sales_LY", "Sales_CY", "YOY_Δ", "YOY_%", "Spike_Index", "Verdict"
