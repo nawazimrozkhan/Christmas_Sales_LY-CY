@@ -3,9 +3,9 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 
-# -----------------------------
-# CONFIG
-# -----------------------------
+# =====================================================
+# PAGE CONFIG
+# =====================================================
 st.set_page_config(
     page_title="Christmas Sales LY-CY",
     layout="wide",
@@ -15,39 +15,47 @@ st.set_page_config(
 st.title("Christmas Sales LY-CY (2024 vs 2025)")
 st.caption("20–25 Dec | Like-to-Like Stores")
 
-# -----------------------------
+# =====================================================
 # LOAD DATA
-# -----------------------------
+# =====================================================
 @st.cache_data
 def load_data(path):
-    df = pd.read_excel(path)
-    return df
+    return pd.read_excel(path)
 
 FILE_PATH = "YOY COMPARISION OF STORES & HO.xlsx"
 df_raw = load_data(FILE_PATH)
 
-# -----------------------------
-# SANITY CHECKS (FAIL FAST)
-# -----------------------------
-required_cols = [
-    "Site", "Date",
-    "Net Sale Qty - 2024", "Net Sale Amount - 2024",
-    "Net Sale Qty - 2025", "Net Sale Amount - 2025"
+# =====================================================
+# SANITY CHECKS (ROBUST)
+# =====================================================
+required_base_cols = [
+    "Site",
+    "Date",
+    "Net Sale Amount - 2024",
+    "Net Sale Amount - 2025"
 ]
 
-missing = [c for c in required_cols if c not in df_raw.columns]
-if missing:
-    st.error(f"Missing required columns: {missing}")
+missing_base = [c for c in required_base_cols if c not in df_raw.columns]
+if missing_base:
+    st.error(f"Missing required columns: {missing_base}")
     st.stop()
 
-# -----------------------------
+# Detect quantity columns dynamically
+qty_2024_col = next((c for c in df_raw.columns if "qty" in c.lower() and "2024" in c), None)
+qty_2025_col = next((c for c in df_raw.columns if "qty" in c.lower() and "2025" in c), None)
+
+if not qty_2024_col or not qty_2025_col:
+    st.error("Quantity columns for 2024 / 2025 not found. Check Excel headers.")
+    st.stop()
+
+# =====================================================
 # NORMALIZE DATA
-# -----------------------------
+# =====================================================
 df = df_raw.rename(columns={
     "Site": "Store",
-    "Net Sale Qty - 2024": "Qty_LY",
+    qty_2024_col: "Qty_LY",
     "Net Sale Amount - 2024": "Sales_LY",
-    "Net Sale Qty - 2025": "Qty_CY",
+    qty_2025_col: "Qty_CY",
     "Net Sale Amount - 2025": "Sales_CY"
 })
 
@@ -56,16 +64,15 @@ df["Date"] = pd.to_datetime(df["Date"])
 df["Daily_YOY"] = df["Sales_CY"] - df["Sales_LY"]
 df["Qty_YOY"] = df["Qty_CY"] - df["Qty_LY"]
 
-# -----------------------------
+# =====================================================
 # AGGREGATIONS
-# -----------------------------
+# =====================================================
 store_agg = df.groupby("Store").agg(
     Sales_LY_Total=("Sales_LY", "sum"),
     Sales_CY_Total=("Sales_CY", "sum"),
     Qty_LY_Total=("Qty_LY", "sum"),
     Qty_CY_Total=("Qty_CY", "sum"),
     Max_Daily_YOY=("Daily_YOY", "max"),
-    Min_Daily_YOY=("Daily_YOY", "min"),
     Avg_Daily_YOY=("Daily_YOY", "mean"),
     Std_Daily_YOY=("Daily_YOY", "std")
 ).reset_index()
@@ -89,15 +96,9 @@ store_agg["YOY_Spike_Index"] = np.where(
     np.nan
 )
 
-store_agg["YOY_Volatility"] = np.where(
-    store_agg["Avg_Daily_YOY"] != 0,
-    store_agg["Std_Daily_YOY"] / abs(store_agg["Avg_Daily_YOY"]),
-    np.nan
-)
-
-# -----------------------------
+# =====================================================
 # EXECUTION VERDICT (AUTO)
-# -----------------------------
+# =====================================================
 def verdict(row):
     if row["YOY_Pct"] < 0:
         return "DECLINED"
@@ -109,19 +110,19 @@ def verdict(row):
         return "PRICE-DRIVEN RISK"
     return "UNCLASSIFIED"
 
-store_agg["Execution_Verdict"] = store_agg.apply(verdict, axis=1)
+store_agg["Execution Verdict"] = store_agg.apply(verdict, axis=1)
 
-# -----------------------------
+# =====================================================
 # KPI METRICS
-# -----------------------------
+# =====================================================
 total_ly = store_agg["Sales_LY_Total"].sum()
 total_cy = store_agg["Sales_CY_Total"].sum()
 net_yoy = total_cy - total_ly
 pct_improved = (store_agg["YOY_Pct"] > 0).mean() * 100
 
-# -----------------------------
+# =====================================================
 # TABS
-# -----------------------------
+# =====================================================
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "CEO Verdict",
     "Daily YOY Consistency",
@@ -130,9 +131,9 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "Action Table"
 ])
 
-# -----------------------------
+# =====================================================
 # TAB 1 — CEO VERDICT
-# -----------------------------
+# =====================================================
 with tab1:
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("Sales 2024", f"₹{total_ly:,.0f}")
@@ -150,20 +151,20 @@ with tab1:
         title="Store-wise YOY Impact"
     )
 
-    spike_stores = store_agg[store_agg["YOY_Spike_Index"] > 1.8]
+    spike = store_agg[store_agg["YOY_Spike_Index"] > 1.8]
     fig.add_scatter(
-        x=spike_stores["YOY_Delta"],
-        y=spike_stores["Store"],
+        x=spike["YOY_Delta"],
+        y=spike["Store"],
         mode="markers",
         marker=dict(color="black", size=10),
-        name="Spike-Driven"
+        name="Spike Driven"
     )
 
     st.plotly_chart(fig, use_container_width=True)
 
-# -----------------------------
+# =====================================================
 # TAB 2 — DAILY YOY CONSISTENCY
-# -----------------------------
+# =====================================================
 with tab2:
     heat = df.pivot_table(
         index="Store",
@@ -179,12 +180,11 @@ with tab2:
     )
     st.plotly_chart(fig, use_container_width=True)
 
-# -----------------------------
+# =====================================================
 # TAB 3 — LY vs CY SHAPE
-# -----------------------------
+# =====================================================
 with tab3:
     store_sel = st.selectbox("Select Store", df["Store"].unique())
-
     d = df[df["Store"] == store_sel].sort_values("Date")
 
     fig = px.line(
@@ -197,9 +197,9 @@ with tab3:
     fig.update_traces(line=dict(width=3))
     st.plotly_chart(fig, use_container_width=True)
 
-# -----------------------------
+# =====================================================
 # TAB 4 — VALUE vs VOLUME
-# -----------------------------
+# =====================================================
 with tab4:
     fig = px.scatter(
         store_agg,
@@ -212,9 +212,9 @@ with tab4:
     fig.add_vline(x=0)
     st.plotly_chart(fig, use_container_width=True)
 
-# -----------------------------
+# =====================================================
 # TAB 5 — ACTION TABLE
-# -----------------------------
+# =====================================================
 with tab5:
     final_table = store_agg[[
         "Store",
@@ -224,7 +224,7 @@ with tab5:
         "YOY_Pct",
         "YOY_Spike_Index",
         "Qty_YOY_Pct",
-        "Execution_Verdict"
+        "Execution Verdict"
     ]]
 
     final_table = final_table.rename(columns={
@@ -233,8 +233,7 @@ with tab5:
         "YOY_Delta": "YOY Δ",
         "YOY_Pct": "YOY %",
         "YOY_Spike_Index": "YOY Spike Index",
-        "Qty_YOY_Pct": "Qty YOY %",
-        "Execution_Verdict": "Execution Verdict"
+        "Qty_YOY_Pct": "Qty YOY %"
     })
 
     st.dataframe(final_table, use_container_width=True)
