@@ -120,8 +120,7 @@ fig = px.bar(
 
 st.plotly_chart(fig, use_container_width=True)
 
-
-    st.dataframe(store_agg[[
+st.dataframe(store_agg[[
         "Store", "Sales_LY", "Sales_CY", "YOY_Δ", "YOY_%", "Spike_Index", "Verdict"
     ]], use_container_width=True)
 
