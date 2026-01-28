@@ -119,16 +119,22 @@ if view_mode == "YOY – Like-to-Like Stores (LFL)":
     c3.metric("Net YOY", f"₹{net_yoy:,.0f}")
     c4.metric("YOY %", f"{yoy_pct*100:.1f}%")
 
-    fig = px.bar(
-        store_agg.sort_values("YOY_Δ"),
-        x="YOY_Δ",
-        y="Store",
-        orientation="h",
-        title=f"LFL Store Impact — {period}",
-        color=store_agg["YOY_Δ"] > 0,
-        color_discrete_map={True: "green", False: "red"}
-    )
-    st.plotly_chart(fig, use_container_width=True)
+store_agg["YOY_Positive"] = store_agg["YOY_Δ"] > 0
+
+store_agg_sorted = store_agg.sort_values("YOY_Δ")
+
+fig = px.bar(
+    store_agg_sorted,
+    x="YOY_Δ",
+    y="Store",
+    orientation="h",
+    title=f"LFL Store Impact — {period}",
+    color="YOY_Positive",
+    color_discrete_map={True: "green", False: "red"}
+)
+
+st.plotly_chart(fig, use_container_width=True)
+
 
     st.dataframe(store_agg, use_container_width=True)
 
