@@ -29,7 +29,7 @@ dec_sheets = load_sheets(DEC_FILE)
 jan_sheets = load_sheets(JAN_FILE)
 
 # =====================================================
-# PERIOD TOGGLE (GLOBAL)
+# PERIOD TOGGLE
 # =====================================================
 period = st.radio(
     "Select Period",
@@ -52,7 +52,6 @@ else:
 # SIDEBAR – VIEW MODE
 # =====================================================
 st.sidebar.title("View Mode")
-
 view_mode = st.sidebar.radio(
     "Select Analysis",
     [
@@ -64,26 +63,19 @@ view_mode = st.sidebar.radio(
 )
 
 # =====================================================
-# HELPER: SAFE SALES COLUMN DETECTION
+# HELPER: SALES COLUMN DETECTION
 # =====================================================
 def detect_sales_columns(df):
-    sale_cols = [c for c in df.columns if "Net Sale Amount" in c]
-
-    if not sale_cols:
-        return None, None
-
-    sale_cols_sorted = sorted(
-        sale_cols,
-        key=lambda x: int("".join(filter(str.isdigit, x)))
-    )
-
-    ly_col = sale_cols_sorted[0] if len(sale_cols_sorted) >= 1 else None
-    cy_col = sale_cols_sorted[1] if len(sale_cols_sorted) >= 2 else None
-
-    return ly_col, cy_col
+    cols = [c for c in df.columns if "Net Sale Amount" in c]
+    cols = sorted(cols, key=lambda x: int("".join(filter(str.isdigit, x))))
+    if len(cols) == 1:
+        return cols[0], None
+    if len(cols) >= 2:
+        return cols[0], cols[1]
+    return None, None
 
 # =====================================================
-# 1️⃣ LFL – YOY
+# LFL VIEW
 # =====================================================
 if view_mode == "YOY – Like-to-Like Stores (LFL)":
 
@@ -91,7 +83,7 @@ if view_mode == "YOY – Like-to-Like Stores (LFL)":
     ly_col, cy_col = detect_sales_columns(df_raw)
 
     if ly_col is None or cy_col is None:
-        st.error("LFL sheet must contain both LY and CY sales columns.")
+        st.error("LFL requires both LY and CY sales columns.")
         st.stop()
 
     df = df_raw.rename(columns={
@@ -107,6 +99,7 @@ if view_mode == "YOY – Like-to-Like Stores (LFL)":
 
     store_agg["YOY_Δ"] = store_agg["Sales_CY"] - store_agg["Sales_LY"]
     store_agg["YOY_%"] = store_agg["YOY_Δ"] / store_agg["Sales_LY"]
+    store_agg["YOY_Positive"] = store_agg["YOY_Δ"] > 0
 
     total_ly = store_agg["Sales_LY"].sum()
     total_cy = store_agg["Sales_CY"].sum()
@@ -119,27 +112,23 @@ if view_mode == "YOY – Like-to-Like Stores (LFL)":
     c3.metric("Net YOY", f"₹{net_yoy:,.0f}")
     c4.metric("YOY %", f"{yoy_pct*100:.1f}%")
 
-store_agg["YOY_Positive"] = store_agg["YOY_Δ"] > 0
+    store_agg_sorted = store_agg.sort_values("YOY_Δ")
 
-store_agg_sorted = store_agg.sort_values("YOY_Δ")
+    fig = px.bar(
+        store_agg_sorted,
+        x="YOY_Δ",
+        y="Store",
+        orientation="h",
+        title=f"LFL Store Impact — {period}",
+        color="YOY_Positive",
+        color_discrete_map={True: "green", False: "red"}
+    )
 
-fig = px.bar(
-    store_agg_sorted,
-    x="YOY_Δ",
-    y="Store",
-    orientation="h",
-    title=f"LFL Store Impact — {period}",
-    color="YOY_Positive",
-    color_discrete_map={True: "green", False: "red"}
-)
-
-st.plotly_chart(fig, use_container_width=True)
-
-
-st.dataframe(store_agg, use_container_width=True)
+    st.plotly_chart(fig, use_container_width=True)
+    st.dataframe(store_agg_sorted, use_container_width=True)
 
 # =====================================================
-# 2️⃣ YOY OF HO
+# HO VIEW
 # =====================================================
 elif view_mode == "YOY of HO":
 
@@ -147,7 +136,7 @@ elif view_mode == "YOY of HO":
     ly_col, cy_col = detect_sales_columns(df)
 
     if ly_col is None or cy_col is None:
-        st.error("HO sheet must contain both LY and CY sales columns.")
+        st.error("HO requires both LY and CY sales columns.")
         st.stop()
 
     total_ly = df[ly_col].sum()
@@ -162,7 +151,7 @@ elif view_mode == "YOY of HO":
     c4.metric("YOY %", f"{yoy_pct*100:.1f}%")
 
 # =====================================================
-# 3️⃣ CLOSED STORES
+# CLOSED STORES
 # =====================================================
 elif view_mode == "Closed Stores":
 
@@ -170,7 +159,7 @@ elif view_mode == "Closed Stores":
     ly_col, _ = detect_sales_columns(df)
 
     if ly_col is None:
-        st.error("Closed Stores sheet must contain an LY sales column.")
+        st.info(f"No closed store data for {period}.")
         st.stop()
 
     lost_sales = df[ly_col].sum()
@@ -186,20 +175,18 @@ elif view_mode == "Closed Stores":
     st.plotly_chart(fig, use_container_width=True)
 
 # =====================================================
-# 4️⃣ NEW STORES
+# NEW STORES
 # =====================================================
 elif view_mode == "New Stores":
 
     df = data_source["New Stores"].copy()
-
-    # Pick the ONLY Net Sale Amount column (current period)
     sale_cols = [c for c in df.columns if "Net Sale Amount" in c]
 
     if not sale_cols:
-        st.info(f"No New Store sales data available for {period}.")
+        st.info(f"No New Store data for {period}.")
         st.stop()
 
-    sales_col = sale_cols[0]  # only one exists by design
+    sales_col = sale_cols[0]
 
     total_sales = df[sales_col].sum()
     avg_sales = df.groupby("Site")[sales_col].sum().mean()
