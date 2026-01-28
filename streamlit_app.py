@@ -136,7 +136,7 @@ fig = px.bar(
 st.plotly_chart(fig, use_container_width=True)
 
 
-    st.dataframe(store_agg, use_container_width=True)
+st.dataframe(store_agg, use_container_width=True)
 
 # =====================================================
 # 2️⃣ YOY OF HO
